@@ -1,0 +1,175 @@
+---
+title: "Tutorial 5: Oligo Analysis"
+author: "Harmen Bussemaker and Vincent FitzPatrick"
+date: "Saturday, June 27, 2015"
+output: html_document
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(prompt=T, comment="")
+```
+
+# OligoAnalysis: Discriminative Motif Discovery using the Binomial Distribution
+
+Before you start this assignment, you must install the `yeastCC` package from Bioconductor. This package contains data from Spellman *et al.* (<http://www.ncbi.nlm.nih.gov/pubmed/9843569>), the first paper to use DNA microarrays to monitor genomewide mRNA expression dynamics over the course of the mitotic cell cycle. In one experiment, yeast cells were treated with alpha-factor, a mating pheromone that caused the cells to arrest in G1. Once synchronized in G1, the cells were allowed to progress through the cell cycle, and the researchers took regular samples to monitor changes in gene expression. As a control, the researchers used asynchronous cells.
+
+You will use this data to cluster a group of genes based on their expression. Then, you'll use the bionomial distribution to identify hexamers that are enriched in this cluster.
+
+You can install `yeastCC` with the following command:
+
+```{r eval=FALSE}
+source("http://bioconductor.org/biocLite.R")
+biocLite("yeastCC")
+```
+
+****
+
+1) Load the `yeastCC` library. This will make an object that is also called `yeastCC` accessible, although it won't appear in your environment. Look at the contents of `yeastCC` (rest assured it will not flood your screen).
+```{r results='hide', message=FALSE, warning=FALSE}
+
+```
+
+****
+
+2) Use `exprs()` on `yeastCC` to create a matrix of genes by samples. Call it `gene.matrix`. Take a look at the first few rows of your matrix. Do you think these values represent intensities, ratios, or logratios? 
+```{r}
+```
+
+
+****
+
+3) Take a look at the column names of `gene.matrix`. We want to isolate only the columns containing "alpha". Try using `grep()` to pull out the index of these columns. Then use these numbers to create a new matrix `alpha` containing the expression values from the time course in which the cells were synchronized using alpha pheromone treatment.
+```{r}
+
+```
+
+
+****
+
+4) You may have noticed that the data contains some "NA" values. NAs are a common feature of microarray data, and they can cause pose problems for certain R functions. For example, try to get the mean and variance of the first column in `alpha`. 
+```{r}
+
+```
+
+****
+
+5) Sometimes it may be appropriate to remove rows with NAs from your analysis. This is especially true if all or most of the values in a row are NAs. Two helpful functions are `complete.cases()`, which returns a logical vector that indicates whether a row contains no NAs (`TRUE`) or at least one NA (`FALSE`), and `is.na()`, which converts each value in a matrix to `TRUE` if it is NA and `FALSE` if it isn't. 
+
+Use `complete.cases()` to pull out only the rows that *do* contain NAs. Then use `is.na()` to convert these rows to a logical matrix. Finally, use `image()` to visualize the position of NAs in the matrix (rows will appear along the X-axis). What does this image tell you?
+
+```{r}
+
+```
+
+
+
+6) Remove any rows from `alpha` that contain only NAs (hint: you may want to use `all()`). How many rows were removed?
+```{r}
+allNAs = apply(is.na(alpha), MARGIN = 1, FUN = all)
+alpha = alpha[!allNAs,]
+sum(allNAs)
+```
+
+
+****
+
+7) Many functions contain arguments for handling NAs. For example, `var()` contains an `na.rm` argument which, if set to `TRUE`, will cause `var()` to remove all NAs before computing the variance. Use this argument to find the variance for each column, and plot the results. If you want to be super accurate, check the column names to identify the time (in minutes) at which each sample was collected.
+```{r}
+vars = apply(alpha, MARGIN = 2, FUN = var, na.rm = T)
+plot(seq(0,119,7),vars,type="b",col="red") #"b" combines points with lines
+```
+
+****
+
+8) As we are going to cluster genes based on their expression profile over time, we need to remove genes that do not show significant variation. To this end, we will require that the variance of each gene over all time points be at least 0.4. How many genes have a variance above this threshold? Create a new matix `alpha.hi` with only these genes. How many genes are there in `alpha.hi`?
+```{r}
+vars.rows = apply(alpha, MARGIN = 1, FUN = var, na.rm = T) #Margin=1 use rows; margin=2 use columns; FUN: function; var: variance
+vars.rows = apply(alpha, MARGIN = 1, FUN = function(x) var(x, na.rm = T)) #Margin=1 use rows; margin=2 use columns
+
+sum(vars.rows >= 0.4)
+alpha.hi = alpha[vars.rows > 0.4,]
+dim(alpha.hi)
+```
+
+****
+
+9) Use `heatmap()` to show a clustering of the high-variance genes across all samples from the alpha-pheromone synchronized time course. Use `Colv = NA` to keep the columns in order. Then use `heatmap()` with `Rowv = NA` and `Colv = NA` to supress clustering of rows. How do the two heatmaps look different?
+```{r}
+heatmap(alpha.hi ,Colv = NA)
+
+```
+
+
+****
+
+10) The function `heatmap()` is a convenient high-level function that calls the `dist()` and `hclust()` functions internally. To get the actual genes in one of the clusters, you will need to apply `dist()` to the expression matrix to turn it into a gene-vs-gene distance matrix, and then use the output of `dist()` as input to the `hclust()` function to perform the actual clustering. Do this, and visualize the result using `plot()`.
+```{r}
+alpha.dist = dist(alpha.hi)
+alpha.hclust = hclust(alpha.dist)
+plot(alpha.hclust)
+```
+
+****
+
+11) Use `cutree()` to cut the dendrogram into 5 clusters. What are the sizes of each cluster? Create an object containing the ORF names of the genes in cluster 4.
+```{r}
+
+```
+
+****
+
+12) What distance metric does `dist()` use by default? Use `dist()` on the first 10 rows in the `alpha.hi`, and look at the output. Why is the matrix not complete? Use `dist()` on the rows corresponding to the first 10 genes in cluster 4. Do you get similar values? Why?
+
+```{r}
+
+```
+
+
+****
+
+13)  Use `load` to load the precomputed matrix `hexamerCounts` from the `hexamerCounts.RData`. This matrix contains the number of times each hexamer sequence appears in the promoter of each gene in the yeast genome. How many columns are there? Why? Take a look at the first 10 rows of the first 10 columns.
+```{r}
+
+```
+
+
+****
+
+14) Compute the overall frequency `p` for each hexamer. What is the sum of these frequencies?
+```{r}
+
+```
+
+
+****
+
+15) For each hexamer, compute the observed count `k` across all the genes in cluster 4. Also compute the "effective" combined length `n` of the promoters of the genes in this cluster (the number of hexamers in all the cluster 4 genes combined).
+```{r}
+
+
+```
+
+****
+
+16) Now compute binomial p-values for each hexamer using `pbinom()` and print the top ten motifs and their p-values. We are looking for hexamers that are over-represented in cluster 4, so you'll want find the upper tail p-value. Remember, `pbinom()` works like `phyper()`, so you'll need to use the `k-1` correction.
+```{r}
+
+```
+
+
+
+****
+
+17) The enrichment ratio (observed motif density divided by expected motif density) is a useful statistic as well. Which are the top ten motifs by this measure? Is the order the same? Why (not)?
+
+```{r}
+
+```
+
+
+
+****
+
+18) Save `alpha` as "alpha.rda" for use in the next tutorial.
+```{r}
+```
+
